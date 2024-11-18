@@ -1,0 +1,86 @@
+#!/bin/bash
+
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  -c <file>   Cut a segment from a video file"
+    echo "  -j          Join multiple video segments into one"
+    echo "  -h          Display this help message"
+    exit 1
+}
+
+cut_segment() {
+    local file="$1"
+    echo "Previewing video in MPV..."
+    echo "Use MPV to find the start and end times for the segment."
+    echo "Format: HH:MM:SS or seconds (e.g., 0:01:23 or 83)."
+
+    mpv "$file"
+    echo -n "Enter start time: "
+    read start_time
+    echo -n "Enter end time: "
+    read end_time
+    echo -n "Enter output file name: "
+    read output_file
+
+    echo "Cutting segment..."
+    ffmpeg -i "$file" -ss "$start_time" -to "$end_time" -c copy "$output_file"
+    echo "Segment saved as $output_file"
+}
+
+join_segments() {
+    echo "Enter the path to the text file listing segments to join:"
+    echo "(Each line in the file should contain the path to a video segment)"
+    echo "Example:"
+    echo "/path/to/segment1.mp4"
+    echo "/path/to/segment2.mp4"
+    echo
+    read list_file
+
+    if [[ ! -f $list_file ]]; then
+        echo "File not found: $list_file"
+        exit 1
+    fi
+
+    echo "Creating intermediate list for ffmpeg..."
+    intermediate_list="file_list.txt"
+    > "$intermediate_list"
+
+    while IFS= read -r line; do
+        echo "file '$line'" >> "$intermediate_list"
+    done < "$list_file"
+
+    echo -n "Enter output file name for the joined video: "
+    read output_file
+
+    echo "Joining segments..."
+    ffmpeg -f concat -safe 0 -i "$intermediate_list" -c copy "$output_file"
+    echo "Joined video saved as $output_file"
+
+    rm -f "$intermediate_list"
+}
+
+if [[ $# -eq 0 ]]; then
+    usage
+fi
+
+while getopts "c:jh" opt; do
+    case "$opt" in
+        c)
+            if [[ ! -f $OPTARG ]]; then
+                echo "File not found: $OPTARG"
+                exit 1
+            fi
+            cut_segment "$OPTARG"
+            ;;
+        j)
+            join_segments
+            ;;
+        h | *)
+            usage
+            ;;
+    esac
+done
+
+exit 0
